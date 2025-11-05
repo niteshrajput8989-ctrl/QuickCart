@@ -14,7 +14,7 @@
     "@google/model-viewer": "^4.1.0",
     "axios": "^1.13.1",
     "cloudinary": "^2.8.0",
-    "inngest": "^3.44.4",
+    "inngest": "^3.44.5",
     "mongoose": "^8.19.2",
     "next": "^15.1.6",
     "react": "^19.2.0",
