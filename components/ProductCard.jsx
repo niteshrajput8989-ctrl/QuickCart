@@ -18,10 +18,11 @@ const ProductCard = ({ product }) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // ✅ FIXED: Support both 'images' and 'image' fields
   const imageSrc =
-    Array.isArray(product.image) && product.image.length > 0
-      ? product.image[0]
-      : assets.placeholder_img;
+    (Array.isArray(product.images) && product.images.length > 0 && product.images[0]) ||
+    (Array.isArray(product.image) && product.image.length > 0 && product.image[0]) ||
+    assets.placeholder_img;
 
   return (
     <div
@@ -30,7 +31,7 @@ const ProductCard = ({ product }) => {
     >
       <div className="group relative bg-gray-500/10 rounded-lg w-full h-52 flex items-center justify-center overflow-hidden">
         <Image
-          src={imageSrc || assets.placeholder_img}
+          src={imageSrc}
           alt={product.name || "Product image"}
           width={800}
           height={800}
