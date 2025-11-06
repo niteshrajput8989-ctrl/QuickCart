@@ -50,15 +50,15 @@ const Navbar = () => {
         {user ? (
           isSeller ? (
             <button
-              onClick={() => router.push("/seller/add_product")}
-              className="text-xs border px-4 py-1.5 rounded-full"
+              onClick={() => router.push("/seller/add_product")} // ✅ Fixed route
+              className="text-xs border px-4 py-1.5 rounded-full hover:bg-gray-100"
             >
               Seller Dashboard
             </button>
           ) : (
             <button
               onClick={() => router.push("/become-seller")}
-              className="text-xs border px-4 py-1.5 rounded-full"
+              className="text-xs border px-4 py-1.5 rounded-full hover:bg-gray-100"
             >
               Become a Seller
             </button>
@@ -104,15 +104,15 @@ const Navbar = () => {
         {user ? (
           isSeller ? (
             <button
-              onClick={() => router.push("/seller")}
-              className="text-xs border px-4 py-1.5 rounded-full"
+              onClick={() => router.push("/seller/add_product")} // ✅ Fixed route
+              className="text-xs border px-4 py-1.5 rounded-full hover:bg-gray-100"
             >
               Seller Dashboard
             </button>
           ) : (
             <button
               onClick={() => router.push("/become-seller")}
-              className="text-xs border px-4 py-1.5 rounded-full"
+              className="text-xs border px-4 py-1.5 rounded-full hover:bg-gray-100"
             >
               Become a Seller
             </button>

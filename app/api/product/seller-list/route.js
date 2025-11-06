@@ -8,32 +8,22 @@ export async function GET(request) {
   try {
     const { userId } = getAuth(request);
 
-    if (!userId) {
+    if (!userId)
       return NextResponse.json({
         success: false,
         message: "User not authenticated",
       });
-    }
 
     const isSeller = await authSeller(userId);
-    if (!isSeller) {
+    if (!isSeller)
       return NextResponse.json({
         success: false,
         message: "User not authorized as seller",
       });
-    }
 
     await connectDB();
 
     const products = await Product.find({ userId }).sort({ date: -1 });
-
-    if (!products.length) {
-      return NextResponse.json({
-        success: false,
-        message: "No products found.",
-        products: [],
-      });
-    }
 
     return NextResponse.json({
       success: true,

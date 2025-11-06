@@ -1,9 +1,8 @@
-'use client'
+"use client";
 import React from "react";
-import { assets } from "@/assets/assets";
-import OrderSummary from "@/components/OrderSummary";
 import Image from "next/image";
 import Navbar from "@/components/Navbar";
+import OrderSummary from "@/components/OrderSummary";
 import { useAppContext } from "@/context/AppContext";
 
 const Cart = () => {
@@ -14,7 +13,12 @@ const Cart = () => {
     addToCart,
     updateCartQuantity,
     getCartCount,
+    removeFromCart,
   } = useAppContext();
+
+  // Agar cartItems object me product data hai (id nahi)
+  const productIds = Object.keys(cartItems || {});
+  const totalCount = getCartCount();
 
   return (
     <>
@@ -27,141 +31,97 @@ const Cart = () => {
               Your <span className="font-medium text-orange-600">Cart</span>
             </p>
             <p className="text-lg md:text-xl text-gray-500/80">
-              {getCartCount()} {getCartCount() === 1 ? "Item" : "Items"}
+              {totalCount} {totalCount === 1 ? "Item" : "Items"}
             </p>
           </div>
 
-          {/* 🛒 CART TABLE */}
-          <div className="overflow-x-auto">
+          {productIds.length === 0 ? (
+            <p className="text-center text-gray-500 py-10">🛍️ Your cart is empty</p>
+          ) : (
             <table className="min-w-full table-auto">
-              <thead className="text-left">
+              <thead>
                 <tr>
-                  <th className="pb-6 md:px-4 px-1 text-gray-600 font-medium">
-                    Product Details
-                  </th>
-                  <th className="pb-6 md:px-4 px-1 text-gray-600 font-medium">
-                    Price
-                  </th>
-                  <th className="pb-6 md:px-4 px-1 text-gray-600 font-medium">
-                    Quantity
-                  </th>
-                  <th className="pb-6 md:px-4 px-1 text-gray-600 font-medium">
-                    Subtotal
-                  </th>
+                  <th className="pb-6 md:px-4 px-1 text-gray-600 font-medium">Product</th>
+                  <th className="pb-6 md:px-4 px-1 text-gray-600 font-medium">Price</th>
+                  <th className="pb-6 md:px-4 px-1 text-gray-600 font-medium">Quantity</th>
+                  <th className="pb-6 md:px-4 px-1 text-gray-600 font-medium">Subtotal</th>
                 </tr>
               </thead>
 
               <tbody>
-                {Object.keys(cartItems).length === 0 && (
-                  <tr>
-                    <td colSpan="4" className="text-center py-10 text-gray-500">
-                      🛍️ Your cart is empty
-                    </td>
-                  </tr>
-                )}
+                {productIds.map((id) => {
+                  const item = cartItems[id]; // <-- ye full object hai
+                  if (!item) return null;
 
-                {Object.keys(cartItems).map((itemId) => {
-                  const product = products.find(
-                    (p) => p._id === itemId
-                  );
-
-                  if (!product || cartItems[itemId] <= 0) return null;
+                  const name = item.name || "Product";
+                  const price = item.offerPrice || item.price || 0;
+                  const qty = item.quantity || 1;
+                  const img = item.image?.[0] || "/placeholder.jpg";
 
                   return (
-                    <tr key={itemId} className="border-b border-gray-200">
-                      {/* 🖼️ Product Image + Details */}
+                    <tr key={id} className="border-b border-gray-200">
                       <td className="flex items-center gap-4 py-4 md:px-4 px-1">
                         <div className="rounded-lg overflow-hidden bg-gray-100 p-2">
                           <Image
-                            src={product.image?.[0] || "/placeholder.jpg"}
-                            alt={product.name || "Product image"}
+                            src={img}
+                            alt={name}
                             width={80}
                             height={80}
                             className="rounded-lg object-cover"
                           />
                         </div>
-
                         <div>
-                          <p className="font-medium text-gray-800">
-                            {product.name}
-                          </p>
+                          <p className="font-medium text-gray-800">{name}</p>
                           <button
                             className="text-xs text-orange-600 mt-1"
-                            onClick={() =>
-                              updateCartQuantity(product._id, 0)
-                            }
+                            onClick={() => removeFromCart(id)}
                           >
                             Remove
                           </button>
                         </div>
                       </td>
 
-                      {/* 💲 Price */}
-                      <td className="py-4 md:px-4 px-1 text-gray-600">
-                        ${product.offerPrice}
-                      </td>
+                      <td className="py-4 md:px-4 px-1 text-gray-600">₹{price}</td>
 
-                      {/* ➕➖ Quantity Controls */}
                       <td className="py-4 md:px-4 px-1">
                         <div className="flex items-center md:gap-2 gap-1">
                           <button
-                            onClick={() =>
-                              updateCartQuantity(
-                                product._id,
-                                Math.max(cartItems[itemId] - 1, 1)
-                              )
-                            }
+                            onClick={() => updateCartQuantity(id, Math.max(qty - 1, 1))}
+                            className="px-2 py-1 border rounded"
                           >
-                            <Image
-                              src={assets.decrease_arrow}
-                              alt="decrease"
-                              className="w-4 h-4"
-                            />
+                            -
                           </button>
                           <input
                             onChange={(e) =>
-                              updateCartQuantity(
-                                product._id,
-                                Math.max(Number(e.target.value), 1)
-                              )
+                              updateCartQuantity(id, Math.max(Number(e.target.value), 1))
                             }
                             type="number"
-                            value={cartItems[itemId]}
-                            className="w-10 border text-center appearance-none rounded"
+                            value={qty}
+                            className="w-14 border text-center rounded"
                           />
                           <button
-                            onClick={() => addToCart(product._id)}
+                            onClick={() => updateCartQuantity(id, qty + 1)}
+                            className="px-2 py-1 border rounded"
                           >
-                            <Image
-                              src={assets.increase_arrow}
-                              alt="increase"
-                              className="w-4 h-4"
-                            />
+                            +
                           </button>
                         </div>
                       </td>
 
-                      {/* 💵 Subtotal */}
                       <td className="py-4 md:px-4 px-1 text-gray-600">
-                        ${(product.offerPrice * cartItems[itemId]).toFixed(2)}
+                        ₹{(price * qty).toFixed(2)}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
+          )}
 
-          {/* 🛍️ Continue Shopping */}
           <button
             onClick={() => router.push("/all-products")}
             className="group flex items-center mt-6 gap-2 text-orange-600"
           >
-            <Image
-              className="group-hover:-translate-x-1 transition"
-              src={assets.arrow_right_icon_colored}
-              alt="arrow_right_icon_colored"
-            />
             Continue Shopping
           </button>
         </div>

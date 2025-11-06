@@ -1,10 +1,11 @@
 "use client";
-import { productsDummyData, userDummyData } from "@/assets/assets";
-import { useAuth, useUser } from "@clerk/nextjs";
-import axios from "axios";
-import { useRouter } from "next/navigation";
+
 import { createContext, useContext, useEffect, useState } from "react";
+import { useAuth, useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
+import axios from "axios";
 import toast from "react-hot-toast";
+import { productsDummyData, userDummyData } from "@/assets/assets";
 
 export const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
@@ -12,16 +13,28 @@ export const useAppContext = () => useContext(AppContext);
 export const AppContextProvider = ({ children }) => {
   const currency = process.env.NEXT_PUBLIC_CURRENCY || "$";
   const router = useRouter();
-
   const { user } = useUser();
   const { getToken } = useAuth();
 
   const [products, setProducts] = useState([]);
   const [userData, setUserData] = useState(null);
   const [isSeller, setIsSeller] = useState(false);
-  const [cartItems, setCartItems] = useState([]); // ✅ store product objects
 
-  // ✅ Fetch all products
+  // 🛒 Cart stores full product objects now
+  const [cartItems, setCartItems] = useState({});
+
+  // 🧠 Load cart from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("cartItems");
+    if (saved) setCartItems(JSON.parse(saved));
+  }, []);
+
+  // 💾 Save cart to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("cartItems", JSON.stringify(cartItems));
+  }, [cartItems]);
+
+  // 📦 Fetch products
   const fetchProductData = async () => {
     try {
       const { data } = await axios.get("/api/product/list");
@@ -31,17 +44,16 @@ export const AppContextProvider = ({ children }) => {
         throw new Error("Invalid API response");
       }
     } catch (error) {
-      console.warn("⚠️ Product fetch failed:", error.message);
-      setProducts(productsDummyData); // fallback
+      console.warn("Product fetch failed:", error.message);
+      setProducts(productsDummyData);
       toast.error("Using dummy products (API error)");
     }
   };
 
-  // ✅ Fetch user data
+  // 👤 Fetch user data
   const fetchUserData = async () => {
     try {
       if (user?.publicMetadata?.role === "seller") setIsSeller(true);
-
       const token = await getToken();
       if (!token) {
         setUserData(userDummyData);
@@ -51,75 +63,96 @@ export const AppContextProvider = ({ children }) => {
       const { data } = await axios.get("/api/user/data", {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (data?.success && data?.user) {
         setUserData(data.user);
-      } else {
-        throw new Error("Invalid user response");
       }
     } catch (error) {
-      console.warn("⚠️ User fetch failed:", error.message);
+      console.warn("User fetch failed:", error.message);
       setUserData(userDummyData);
     }
   };
 
-  // 🛒 Add to Cart
-  const addToCart = (product) => {
-    if (!product) return;
-    setCartItems((prev) => {
-      const existing = prev.find(
-        (p) => String(p._id) === String(product._id) || String(p.id) === String(product.id)
+  // ☁️ Sync cart with server
+  const syncCartToServer = async (newCart) => {
+    if (!user) return;
+    try {
+      const token = await getToken();
+      await axios.post(
+        "/api/cart/update",
+        { cartItems: newCart },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      if (existing) {
-        return prev.map((p) =>
-          String(p._id) === String(product._id) || String(p.id) === String(product.id)
-            ? { ...p, quantity: (p.quantity || 1) + 1 }
-            : p
-        );
-      } else {
-        return [...prev, { ...product, quantity: 1 }];
-      }
-    });
-    toast.success(`${product.name} added to cart`);
-  };
-
-  // 🧮 Update cart quantity
-  const updateCartQuantity = (id, quantity) => {
-    if (quantity <= 0) {
-      setCartItems((prev) =>
-        prev.filter((item) => String(item._id) !== String(id) && String(item.id) !== String(id))
-      );
-      return;
+    } catch (err) {
+      console.error("syncCartToServer failed:", err?.response?.data || err.message);
     }
-
-    setCartItems((prev) =>
-      prev.map((item) =>
-        String(item._id) === String(id) || String(item.id) === String(id)
-          ? { ...item, quantity }
-          : item
-      )
-    );
   };
 
-  // ❌ Remove item from cart
-  const removeFromCart = (id) => {
-    setCartItems((prev) =>
-      prev.filter((item) => String(item._id) !== String(id) && String(item.id) !== String(id))
-    );
-    toast.error("Item removed");
+  // 🧩 Add to cart (store full product)
+  const addToCart = async (product, qty = 1) => {
+    if (!product?._id) return toast.error("Invalid product");
+
+    const productId = product._id;
+
+    setCartItems((prev) => {
+      const next = { ...prev };
+
+      if (next[productId]) {
+        next[productId].quantity += qty;
+      } else {
+        next[productId] = {
+          ...product,
+          quantity: qty,
+        };
+      }
+
+      syncCartToServer(next);
+      return next;
+    });
+
+    toast.success(`${product.name || "Item"} added to cart`);
   };
 
-  // 🧾 Cart total amount
+  // 🔢 Update quantity
+  const updateCartQuantity = async (productId, quantity) => {
+    const q = Number(quantity);
+    setCartItems((prev) => {
+      const next = { ...prev };
+      if (!next[productId]) return prev;
+
+      if (q <= 0) {
+        delete next[productId];
+      } else {
+        next[productId].quantity = q;
+      }
+
+      syncCartToServer(next);
+      return next;
+    });
+  };
+
+  // ❌ Remove item
+  const removeFromCart = async (productId) => {
+    setCartItems((prev) => {
+      const next = { ...prev };
+      delete next[productId];
+      syncCartToServer(next);
+      return next;
+    });
+    toast.success("Item removed");
+  };
+
+  // 💰 Calculate total price
   const getCartAmount = () =>
-    cartItems.reduce(
-      (sum, item) => sum + (item.offerPrice || item.price || 0) * (item.quantity || 1),
+    Object.values(cartItems).reduce(
+      (sum, item) => sum + (item.offerPrice || item.price || 0) * (item.quantity || 0),
       0
     );
 
-  // 🧮 Cart item count
+  // 🧮 Count total items
   const getCartCount = () =>
-    cartItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
+    Object.values(cartItems).reduce((sum, item) => sum + (item.quantity || 0), 0);
 
+  // 🔁 Fetch data
   useEffect(() => {
     fetchProductData();
   }, []);
@@ -138,14 +171,12 @@ export const AppContextProvider = ({ children }) => {
         isSeller,
         setIsSeller,
         userData,
-        fetchUserData,
         products,
-        fetchProductData,
         cartItems,
         setCartItems,
         addToCart,
-        removeFromCart,
         updateCartQuantity,
+        removeFromCart,
         getCartCount,
         getCartAmount,
       }}

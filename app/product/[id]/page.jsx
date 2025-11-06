@@ -1,5 +1,5 @@
 "use client";
-import "@google/model-viewer"; // ✅ 3D viewer को globally import किया गया
+
 import React, { useEffect, useState } from "react";
 import { assets, productsDummyData } from "@/assets/assets";
 import ProductCard from "@/components/ProductCard";
@@ -16,6 +16,11 @@ const Product = () => {
 
   const [productData, setProductData] = useState(null);
   const [mainView, setMainView] = useState(null);
+
+  // ✅ Browser-only import for model-viewer
+  useEffect(() => {
+    import("@google/model-viewer");
+  }, []);
 
   // ✅ Product data find logic
   useEffect(() => {
@@ -153,7 +158,7 @@ const Product = () => {
             {/* ✅ Fixed Buttons */}
             <div className="flex gap-4 mt-8">
               <button
-                onClick={() => addToCart(productData)} // पूरा product भेजो
+                onClick={() => addToCart(productData)}
                 className="w-full py-3.5 bg-gray-100 text-gray-800 hover:bg-gray-200 transition"
               >
                 Add to Cart

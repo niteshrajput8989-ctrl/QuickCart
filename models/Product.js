@@ -6,7 +6,7 @@ const ProductSchema = new mongoose.Schema({
   description: { type: String, required: true },
   price: { type: Number, required: true },
   offerPrice: { type: Number, required: true },
-  image: { type: [String], required: true }, // ✅ changed "images" → "image"
+  images: { type: [String], required: true }, // ✅ fixed field name
   category: { type: String, required: true },
   date: { type: Date, default: Date.now },
   modelGlb: { type: String },
@@ -14,6 +14,7 @@ const ProductSchema = new mongoose.Schema({
   modelPoster: { type: String },
 });
 
-const Product = mongoose.models.Product || mongoose.model("Product", ProductSchema);
+const Product =
+  mongoose.models.Product || mongoose.model("Product", ProductSchema);
 
 export default Product;

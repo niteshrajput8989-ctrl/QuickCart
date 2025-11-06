@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState } from "react";
 import { assets } from "@/assets/assets";
 import Image from "next/image";
@@ -8,9 +7,7 @@ import axios from "axios";
 import toast from "react-hot-toast";
 
 const AddProduct = () => {
-  console.log("🟢 AddProduct component loaded"); // Component load hone par log
-
-  const { getToken } = useAppContext();
+  const { getToken, user } = useAppContext();
 
   const [files, setFiles] = useState([]);
   const [name, setName] = useState("");
@@ -19,10 +16,8 @@ const AddProduct = () => {
   const [price, setPrice] = useState("");
   const [offerPrice, setOfferPrice] = useState("");
 
-  // ✅ Form submit handler
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("✅ handleSubmit triggered");
 
     const formData = new FormData();
     formData.append("name", name);
@@ -32,12 +27,14 @@ const AddProduct = () => {
     formData.append("offerPrice", offerPrice);
 
     const token = await getToken();
-    console.log("🟣 Token from Clerk:", token);
-
     if (!token) {
       toast.error("Authentication token missing!");
       return;
     }
+
+    // ✅ Clerk user id as sellerId
+    const sellerId = user?.id;
+    if (sellerId) formData.append("sellerId", sellerId);
 
     for (let i = 0; i < files.length; i++) {
       formData.append("images", files[i]);
@@ -49,7 +46,7 @@ const AddProduct = () => {
       });
 
       if (data.success) {
-        toast.success(data.message);
+        toast.success("✅ Product added successfully!");
         setFiles([]);
         setName("");
         setDescription("");
@@ -60,16 +57,15 @@ const AddProduct = () => {
         toast.error(data.message);
       }
     } catch (error) {
-      toast.error(error.message);
-      console.error("❌ Error while adding product:", error);
+      console.error(error);
+      toast.error("Failed to add product.");
     }
   };
 
   return (
     <div className="flex-1 min-h-screen flex flex-col justify-between">
-      {/* Product Add Form */}
       <form onSubmit={handleSubmit} className="md:p-10 p-4 space-y-5 max-w-lg">
-        {/* Upload Images */}
+        {/* Image Upload */}
         <div>
           <p className="text-base font-medium">Product Image</p>
           <div className="flex flex-wrap items-center gap-3 mt-2">
@@ -102,50 +98,37 @@ const AddProduct = () => {
         </div>
 
         {/* Product Name */}
-        <div className="flex flex-col gap-1 max-w-md">
-          <label className="text-base font-medium" htmlFor="product-name">
-            Product Name
-          </label>
+        <div>
+          <label className="font-medium">Product Name</label>
           <input
-            id="product-name"
             type="text"
-            placeholder="Type here"
-            className="outline-none md:py-2.5 py-2 px-3 rounded border border-gray-500/40"
+            className="w-full border rounded px-3 py-2"
+            placeholder="Type name..."
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
           />
         </div>
 
-        {/* Product Description */}
-        <div className="flex flex-col gap-1 max-w-md">
-          <label
-            className="text-base font-medium"
-            htmlFor="product-description"
-          >
-            Product Description
-          </label>
+        {/* Description */}
+        <div>
+          <label className="font-medium">Description</label>
           <textarea
-            id="product-description"
+            className="w-full border rounded px-3 py-2 resize-none"
             rows={4}
-            placeholder="Type here"
-            className="outline-none md:py-2.5 py-2 px-3 rounded border border-gray-500/40 resize-none"
+            placeholder="Type description..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             required
           ></textarea>
         </div>
 
-        {/* Category, Price, Offer */}
-        <div className="flex items-center gap-5 flex-wrap">
-          {/* Category */}
-          <div className="flex flex-col gap-1 w-32">
-            <label className="text-base font-medium" htmlFor="category">
-              Category
-            </label>
+        {/* Category + Price */}
+        <div className="flex gap-5 flex-wrap">
+          <div>
+            <label className="font-medium">Category</label>
             <select
-              id="category"
-              className="outline-none md:py-2.5 py-2 px-3 rounded border border-gray-500/40"
+              className="w-32 border rounded px-3 py-2"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             >
@@ -158,33 +141,21 @@ const AddProduct = () => {
               <option value="Accessories">Accessories</option>
             </select>
           </div>
-
-          {/* Product Price */}
-          <div className="flex flex-col gap-1 w-32">
-            <label className="text-base font-medium" htmlFor="product-price">
-              Product Price
-            </label>
+          <div>
+            <label className="font-medium">Price</label>
             <input
-              id="product-price"
               type="number"
-              placeholder="0"
-              className="outline-none md:py-2.5 py-2 px-3 rounded border border-gray-500/40"
+              className="w-32 border rounded px-3 py-2"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               required
             />
           </div>
-
-          {/* Offer Price */}
-          <div className="flex flex-col gap-1 w-32">
-            <label className="text-base font-medium" htmlFor="offer-price">
-              Offer Price
-            </label>
+          <div>
+            <label className="font-medium">Offer Price</label>
             <input
-              id="offer-price"
               type="number"
-              placeholder="0"
-              className="outline-none md:py-2.5 py-2 px-3 rounded border border-gray-500/40"
+              className="w-32 border rounded px-3 py-2"
               value={offerPrice}
               onChange={(e) => setOfferPrice(e.target.value)}
               required
@@ -192,20 +163,13 @@ const AddProduct = () => {
           </div>
         </div>
 
-        {/* Submit Button */}
         <button
           type="submit"
-          onClick={() => console.log("🟢 Button clicked")}
-          className="px-8 py-2.5 bg-orange-600 text-white font-medium rounded"
+          className="bg-orange-600 text-white px-8 py-2.5 rounded"
         >
-          ADD
+          Add Product
         </button>
       </form>
-
-      {/* Test Button (for console check) */}
-      <button onClick={() => console.log("✅ Outside button works")}>
-        Test Button
-      </button>
     </div>
   );
 };
