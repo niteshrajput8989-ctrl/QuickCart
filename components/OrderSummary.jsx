@@ -1,32 +1,74 @@
 "use client";
-import { addressDummyData } from "@/assets/assets";
 import { useAppContext } from "@/context/AppContext";
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import axios from "axios";
 
 const OrderSummary = () => {
-  const { currency, router, getCartCount, getCartAmount, cartItems, getToken } = useAppContext();
+  const {
+    currency,
+    router,
+    getCartCount,
+    getCartAmount,
+    cartItems,
+    getToken,
+  } = useAppContext();
+
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [userAddresses, setUserAddresses] = useState([]);
   const [promo, setPromo] = useState("");
   const [discount, setDiscount] = useState(0);
+  const [loading, setLoading] = useState(false);
 
-  // 🏠 Fetch dummy addresses (later connect with API)
+  // Fetch user addresses from backend
   const fetchUserAddresses = async () => {
-    setUserAddresses(addressDummyData);
+    try {
+      setLoading(true);
+      const token = await getToken();
+      if (!token) {
+        // user not logged in — don't show toast spam, keep addresses empty
+        setUserAddresses([]);
+        setSelectedAddress(null);
+        return;
+      }
+
+      const { data } = await axios.get("/api/user/data", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // backend returns { success: true, user: { addresses: [...] } }
+      if (data?.success) {
+        const addresses = data.user?.addresses || [];
+        setUserAddresses(addresses);
+        if (addresses.length > 0) setSelectedAddress(addresses[0]);
+        else setSelectedAddress(null);
+      } else {
+        setUserAddresses([]);
+        setSelectedAddress(null);
+      }
+    } catch (err) {
+      console.error("❌ Failed to fetch addresses:", err);
+      setUserAddresses([]);
+      setSelectedAddress(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // ✅ Select Address
+  useEffect(() => {
+    fetchUserAddresses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleAddressSelect = (address) => {
     setSelectedAddress(address);
     setIsDropdownOpen(false);
   };
 
-  // 🏷️ Apply Promo Code
   const handlePromoApply = () => {
-    if (promo.trim().toLowerCase() === "save10") {
+    const code = promo.trim().toLowerCase();
+    if (code === "save10") {
       setDiscount(0.1);
       toast.success("Promo applied: 10% off");
     } else {
@@ -35,117 +77,112 @@ const OrderSummary = () => {
     }
   };
 
-  // 🛒 Create Order
   const createOrder = async () => {
-    if (!selectedAddress) return toast.error("Please select address");
+    if (!selectedAddress) return toast.error("Please select address first");
+
+    const subtotal = getCartAmount();
+    const tax = Math.floor(subtotal * 0.02);
+    const discountAmount = Math.floor(subtotal * discount);
+    const total = subtotal + tax - discountAmount;
 
     const orderData = {
       items: Object.values(cartItems),
-      subtotal: getCartAmount(),
+      subtotal,
       discountPercent: discount * 100,
-      tax: Math.floor(getCartAmount() * 0.02),
-      total: Math.floor(getCartAmount() * (1 + 0.02 - discount)),
+      tax,
+      total,
       address: selectedAddress,
       date: new Date().toISOString(),
     };
 
     try {
       const token = await getToken();
+      if (!token) {
+        toast.error("User not authenticated!");
+        return;
+      }
+
       await axios.post("/api/order/create", orderData, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
       toast.success("Order placed successfully!");
       router.push("/orders");
     } catch (err) {
-      console.error(err);
+      console.error("❌ Order creation failed:", err);
       toast.error("Order creation failed!");
     }
   };
 
-  useEffect(() => {
-    fetchUserAddresses();
-  }, []);
-
-  // 💰 Calculations
+  // price calc
   const subtotal = getCartAmount();
   const tax = Math.floor(subtotal * 0.02);
   const discountAmount = Math.floor(subtotal * discount);
   const total = subtotal + tax - discountAmount;
 
   return (
-    <div className="w-full md:w-96 bg-gray-50 p-5 rounded-2xl shadow">
-      <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-3">
+    <div className="w-full md:w-96 bg-white p-6 rounded-2xl shadow-lg">
+      <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-4">
         Order Summary
       </h2>
       <hr className="border-gray-300 mb-5" />
 
-      {/* Address Section */}
-      <div className="mb-6">
+      <div className="mb-6 relative">
         <label className="text-sm font-semibold text-gray-600 block mb-2">
           Select Address
         </label>
-        <div className="relative border rounded-md overflow-hidden">
-          <button
-            className="peer w-full text-left px-4 pr-2 py-2 bg-white text-gray-700 focus:outline-none"
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          >
-            <span>
-              {selectedAddress
-                ? `${selectedAddress.fullName}, ${selectedAddress.area}, ${selectedAddress.city}`
-                : "Select Address"}
-            </span>
-            <svg
-              className={`w-5 h-5 inline float-right transition-transform duration-200 ${
-                isDropdownOpen ? "rotate-0" : "-rotate-90"
-              }`}
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="#6B7280"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
+        <button
+          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          className="w-full border rounded-md bg-gray-50 hover:bg-gray-100 px-4 py-2 text-left text-gray-700 focus:outline-none"
+        >
+          {loading
+            ? "Loading..."
+            : selectedAddress
+            ? `${selectedAddress.fullName}, ${selectedAddress.city}`
+            : "Select Address"}
+          <span className="float-right text-gray-500">▼</span>
+        </button>
 
-          {isDropdownOpen && (
-            <ul className="absolute w-full bg-white border shadow-md mt-1 z-10 py-1.5 max-h-56 overflow-y-auto">
-              {userAddresses.map((address, index) => (
+        {isDropdownOpen && (
+          <ul className="absolute bg-white w-full border shadow-md rounded-md mt-1 z-10 max-h-60 overflow-y-auto">
+            {userAddresses.length > 0 ? (
+              userAddresses.map((address, index) => (
                 <li
                   key={index}
-                  className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-700"
                   onClick={() => handleAddressSelect(address)}
+                  className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-700"
                 >
-                  {address.fullName}, {address.area}, {address.city}
+                  {address.fullName}, {address.area || address.city}, {address.state}
                 </li>
-              ))}
-              <li
-                onClick={() => router.push("/add-address")}
-                className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-center text-orange-600 font-medium"
-              >
-                + Add New Address
-              </li>
-            </ul>
-          )}
-        </div>
+              ))
+            ) : (
+              <li className="px-4 py-2 text-gray-500">No addresses found</li>
+            )}
+            <li
+              onClick={() => {
+                setIsDropdownOpen(false);
+                router.push("/add-address");
+              }}
+              className="px-4 py-2 text-center text-orange-600 font-medium hover:bg-gray-100 cursor-pointer"
+            >
+              + Add New Address
+            </li>
+          </ul>
+        )}
       </div>
 
-      {/* Promo Code */}
+      {/* Promo */}
       <div className="mb-6">
         <label className="text-sm font-semibold text-gray-600 block mb-2">
           Promo Code
         </label>
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           <input
             type="text"
             value={promo}
             onChange={(e) => setPromo(e.target.value)}
             placeholder="Enter promo code"
-            className="flex-grow outline-none p-2.5 text-gray-600 border rounded-md"
+            className="flex-grow border rounded-md px-3 py-2 outline-none"
           />
           <button
             onClick={handlePromoApply}
@@ -158,11 +195,13 @@ const OrderSummary = () => {
 
       <hr className="border-gray-300 mb-5" />
 
-      {/* Price Details */}
       <div className="space-y-3 text-gray-700 text-sm">
         <div className="flex justify-between">
           <p>Items ({getCartCount()})</p>
-          <p>{currency}{subtotal}</p>
+          <p>
+            {currency}
+            {subtotal}
+          </p>
         </div>
         <div className="flex justify-between">
           <p>Shipping</p>
@@ -170,21 +209,29 @@ const OrderSummary = () => {
         </div>
         <div className="flex justify-between">
           <p>Tax (2%)</p>
-          <p>{currency}{tax}</p>
+          <p>
+            {currency}
+            {tax}
+          </p>
         </div>
         {discount > 0 && (
           <div className="flex justify-between text-green-600 font-medium">
             <p>Discount ({discount * 100}%)</p>
-            <p>-{currency}{discountAmount}</p>
+            <p>
+              -{currency}
+              {discountAmount}
+            </p>
           </div>
         )}
         <div className="flex justify-between text-base md:text-lg font-semibold border-t pt-3 mt-3">
           <p>Total</p>
-          <p>{currency}{total}</p>
+          <p>
+            {currency}
+            {total}
+          </p>
         </div>
       </div>
 
-      {/* Place Order */}
       <button
         onClick={createOrder}
         className="w-full bg-orange-600 text-white py-3 mt-6 rounded-md hover:bg-orange-700 transition font-medium"
