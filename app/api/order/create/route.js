@@ -1,44 +1,88 @@
-import { inngest } from "@/config/inngest";
-import Product from "@/models/Product";
-import User from "@/models/User";
-import { getAuth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import connectDB from "@/config/db";
+import Order from "@/models/Order";
+import User from "@/models/User";
+import Product from "@/models/Product";
 
-export async function POST(request) {
+export async function POST(req) {
   try {
-    const { userId } = getAuth(request);
-    const { address, items } = await request.json();
+    const body = await req.json();
+    const { userId, cartItems, totalAmount, address } = body;
 
-    if (!address || items.length === 0) {
-      return NextResponse.json({ success: false, message: "Invalid data" });
+    // 🧠 Safety check
+    if (!cartItems || !Array.isArray(cartItems)) {
+      console.error("❌ cartItems missing or invalid:", cartItems);
+      return NextResponse.json(
+        { success: false, message: "Invalid cart data" },
+        { status: 400 }
+      );
     }
 
-    // calculate amount using items
-    const amount = await items.reduce(async (acc, item) => {
-      const product = await Product.findById(item.product);
-      return acc + product.offerPrice * item.quantity;
-    }, 0);
+    await connectDB();
+    console.log("📦 Creating order for user:", userId);
 
-    await inngest.send({
-      name: "order/created",
-      data: {
-        userId,
-        address,
-        items,
-        amount: amount + Math.floor(amount * 0.02),
-        data: Date.now(),
-      },
+    // ✅ Agar product DB me nahi milta, dummy data use karo
+    const itemsWithDetails = await Promise.all(
+      cartItems.map(async (item) => {
+        try {
+          const product = await Product.findById(item.productId);
+
+          if (!product) {
+            console.log(
+              "⚠️ Product not found in DB:",
+              item.productId,
+              "— using dummy data"
+            );
+            return {
+              product: {
+                _id: item.productId || "dummy-id",
+                name: item.name || "Dummy Product",
+                price: item.price || 999,
+              },
+              quantity: item.quantity || 1,
+            };
+          }
+
+          return {
+            product: {
+              _id: product._id,
+              name: product.name,
+              price: product.price,
+            },
+            quantity: item.quantity,
+          };
+        } catch (err) {
+          console.log("⚠️ Error loading product, using dummy:", err.message);
+          return {
+            product: {
+              _id: item.productId || "dummy-id",
+              name: item.name || "Dummy Product",
+              price: item.price || 999,
+            },
+            quantity: item.quantity || 1,
+          };
+        }
+      })
+    );
+
+    // ✅ Order create karna
+    const newOrder = new Order({
+      user: userId,
+      items: itemsWithDetails,
+      total: totalAmount || 0,
+      address: address || "No address provided",
+      status: "pending",
     });
 
-    //clear user cart
-    const user = await User.findById(userId)
-    user.cartItems = {}
-    await user.save()
+    await newOrder.save();
 
-    return NextResponse.json({ success: true, message: "Order Placed" });
-
+    console.log("✅ Order saved successfully!");
+    return NextResponse.json({ success: true, order: newOrder });
   } catch (error) {
-        return NextResponse.json({ success: false, message: error.message });
-
+    console.error("❌ Error creating order:", error);
+    return NextResponse.json({
+      success: false,
+      message: error.message,
+    });
   }
 }

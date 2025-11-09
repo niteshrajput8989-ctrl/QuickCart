@@ -14,9 +14,9 @@ const Cart = () => {
     updateCartQuantity,
     getCartCount,
     removeFromCart,
+    currency,
   } = useAppContext();
 
-  // Agar cartItems object me product data hai (id nahi)
   const productIds = Object.keys(cartItems || {});
   const totalCount = getCartCount();
 
@@ -24,7 +24,7 @@ const Cart = () => {
     <>
       <Navbar />
       <div className="flex flex-col md:flex-row gap-10 px-6 md:px-16 lg:px-32 pt-14 mb-20">
-        {/* LEFT SIDE - CART ITEMS */}
+        {/* LEFT SIDE */}
         <div className="flex-1">
           <div className="flex items-center justify-between mb-8 border-b border-gray-500/30 pb-6">
             <p className="text-2xl md:text-3xl text-gray-500">
@@ -47,29 +47,26 @@ const Cart = () => {
                   <th className="pb-6 md:px-4 px-1 text-gray-600 font-medium">Subtotal</th>
                 </tr>
               </thead>
-
               <tbody>
                 {productIds.map((id) => {
-                  const item = cartItems[id]; // <-- ye full object hai
+                  const item = cartItems[id];
                   if (!item) return null;
 
                   const name = item.name || "Product";
-                  const price = item.offerPrice || item.price || 0;
-                  const qty = item.quantity || 1;
-                  const img = item.image?.[0] || "/placeholder.jpg";
+                  const price = Number(item.offerPrice ?? item.price ?? 0);
+                  const qty = Number(item.quantity ?? 1);
+                  const img = item.image?.[0] || item.imageUrl || "/placeholder.jpg";
 
                   return (
                     <tr key={id} className="border-b border-gray-200">
                       <td className="flex items-center gap-4 py-4 md:px-4 px-1">
-                        <div className="rounded-lg overflow-hidden bg-gray-100 p-2">
-                          <Image
-                            src={img}
-                            alt={name}
-                            width={80}
-                            height={80}
-                            className="rounded-lg object-cover"
-                          />
-                        </div>
+                        <Image
+                          src={img}
+                          alt={name}
+                          width={80}
+                          height={80}
+                          className="rounded-lg object-cover"
+                        />
                         <div>
                           <p className="font-medium text-gray-800">{name}</p>
                           <button
@@ -81,7 +78,9 @@ const Cart = () => {
                         </div>
                       </td>
 
-                      <td className="py-4 md:px-4 px-1 text-gray-600">₹{price}</td>
+                      <td className="py-4 md:px-4 px-1 text-gray-600">
+                        {currency}{price.toFixed(2)}
+                      </td>
 
                       <td className="py-4 md:px-4 px-1">
                         <div className="flex items-center md:gap-2 gap-1">
@@ -92,11 +91,11 @@ const Cart = () => {
                             -
                           </button>
                           <input
+                            type="number"
+                            value={qty}
                             onChange={(e) =>
                               updateCartQuantity(id, Math.max(Number(e.target.value), 1))
                             }
-                            type="number"
-                            value={qty}
                             className="w-14 border text-center rounded"
                           />
                           <button
@@ -109,7 +108,7 @@ const Cart = () => {
                       </td>
 
                       <td className="py-4 md:px-4 px-1 text-gray-600">
-                        ₹{(price * qty).toFixed(2)}
+                        {currency}{(price * qty).toFixed(2)}
                       </td>
                     </tr>
                   );
@@ -126,7 +125,7 @@ const Cart = () => {
           </button>
         </div>
 
-        {/* RIGHT SIDE - ORDER SUMMARY */}
+        {/* RIGHT SIDE */}
         <OrderSummary />
       </div>
     </>

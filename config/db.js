@@ -11,7 +11,7 @@ async function connectDB() {
 
   if (!cached.promise) {
     const opts = {
-      dbName: "quickcart", // ✅ Database name confirm kar lo
+      dbName: "quickcart",
       bufferCommands: false,
     };
 

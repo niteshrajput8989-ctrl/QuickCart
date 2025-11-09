@@ -1,18 +1,18 @@
 import mongoose from "mongoose";
 
 const AddressSchema = new mongoose.Schema({
-  fullName: { type: String, default: "" },
-  phone: { type: String, default: "" },
-  street: { type: String, default: "" },
-  area: { type: String, default: "" }, // you used area in frontend
-  city: { type: String, default: "" },
-  state: { type: String, default: "" },
-  postalCode: { type: String, default: "" },
-  country: { type: String, default: "" },
+  fullName: String,
+  phone: String,
+  street: String,
+  area: String,
+  city: String,
+  state: String,
+  postalCode: String,
+  country: String,
 });
 
 const CartItemSchema = new mongoose.Schema({
-  productId: { type: String, required: true },
+  product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
   name: String,
   price: Number,
   imageUrl: String,
@@ -21,23 +21,14 @@ const CartItemSchema = new mongoose.Schema({
 
 const UserSchema = new mongoose.Schema(
   {
-    clerkId: { type: String, required: true, unique: true }, // Clerk user ID
+    clerkId: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
-    imageUrl: { type: String, default: "" },
-
-    cartItems: {
-      type: [CartItemSchema],
-      default: [],
-    },
-
-    // ✅ addresses array
-    addresses: {
-      type: [AddressSchema],
-      default: [],
-    },
+    imageUrl: String,
+    cartItems: [CartItemSchema],
+    addresses: [AddressSchema],
   },
-  { minimize: false, timestamps: true }
+  { timestamps: true }
 );
 
 const User = mongoose.models.User || mongoose.model("User", UserSchema);

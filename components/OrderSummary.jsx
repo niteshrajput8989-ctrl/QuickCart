@@ -9,48 +9,62 @@ const OrderSummary = () => {
     currency,
     router,
     getCartCount,
-    getCartAmount,
     cartItems,
     getToken,
+    setCartItems,
+    user,
   } = useAppContext();
 
   const [selectedAddress, setSelectedAddress] = useState(null);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [userAddresses, setUserAddresses] = useState([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [promo, setPromo] = useState("");
   const [discount, setDiscount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [placingOrder, setPlacingOrder] = useState(false);
 
-  // Fetch user addresses from backend
+  // ✅ Total Calculation
+  const getTotal = () => {
+    let total = 0;
+    Object.values(cartItems || {}).forEach((item) => {
+      if (!item || typeof item !== "object") return;
+      const price = Number(
+        item?.offerPrice !== undefined && item?.offerPrice !== null
+          ? item.offerPrice
+          : item?.price || 0
+      );
+      const qty = Number(item?.quantity || 1);
+      total += price * qty;
+    });
+    return total.toFixed(2);
+  };
+
+  const subtotal = parseFloat(getTotal());
+  const tax = (subtotal * 0.02).toFixed(2);
+  const discountAmount = (subtotal * discount).toFixed(2);
+  const total = (subtotal + parseFloat(tax) - discountAmount).toFixed(2);
+
+  // ✅ Fetch user addresses
   const fetchUserAddresses = async () => {
     try {
       setLoading(true);
       const token = await getToken();
-      if (!token) {
-        // user not logged in — don't show toast spam, keep addresses empty
-        setUserAddresses([]);
-        setSelectedAddress(null);
-        return;
-      }
+      if (!token) return;
 
       const { data } = await axios.get("/api/user/data", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // backend returns { success: true, user: { addresses: [...] } }
       if (data?.success) {
         const addresses = data.user?.addresses || [];
         setUserAddresses(addresses);
-        if (addresses.length > 0) setSelectedAddress(addresses[0]);
-        else setSelectedAddress(null);
+        setSelectedAddress(addresses[0] || null);
       } else {
         setUserAddresses([]);
-        setSelectedAddress(null);
       }
     } catch (err) {
       console.error("❌ Failed to fetch addresses:", err);
       setUserAddresses([]);
-      setSelectedAddress(null);
     } finally {
       setLoading(false);
     }
@@ -58,67 +72,67 @@ const OrderSummary = () => {
 
   useEffect(() => {
     fetchUserAddresses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
-  const handleAddressSelect = (address) => {
-    setSelectedAddress(address);
-    setIsDropdownOpen(false);
-  };
-
+  // ✅ Promo Code
   const handlePromoApply = () => {
-    const code = promo.trim().toLowerCase();
-    if (code === "save10") {
+    if (promo.toLowerCase() === "save10") {
       setDiscount(0.1);
-      toast.success("Promo applied: 10% off");
+      toast.success("Promo code applied (10% off)");
     } else {
-      setDiscount(0);
       toast.error("Invalid promo code");
+      setDiscount(0);
     }
   };
 
+  // ✅ Place Order Function
   const createOrder = async () => {
-    if (!selectedAddress) return toast.error("Please select address first");
-
-    const subtotal = getCartAmount();
-    const tax = Math.floor(subtotal * 0.02);
-    const discountAmount = Math.floor(subtotal * discount);
-    const total = subtotal + tax - discountAmount;
-
-    const orderData = {
-      items: Object.values(cartItems),
-      subtotal,
-      discountPercent: discount * 100,
-      tax,
-      total,
-      address: selectedAddress,
-      date: new Date().toISOString(),
-    };
-
     try {
-      const token = await getToken();
-      if (!token) {
-        toast.error("User not authenticated!");
-        return;
-      }
+      if (!selectedAddress?._id) return toast.error("Please select an address");
 
-      await axios.post("/api/order/create", orderData, {
-        headers: { Authorization: `Bearer ${token}` },
+      const token = await getToken();
+      if (!token) return toast.error("Please login first");
+
+      // 🧩 Convert cartItems to array for API
+      const itemsArray = Object.values(cartItems || {}).map((item) => ({
+        product: item._id, // ✅ FIXED: Correct key expected by backend
+        quantity: item.quantity || 1,
+      }));
+
+      if (itemsArray.length === 0) return toast.error("Your cart is empty");
+
+      setPlacingOrder(true);
+
+      const res = await fetch("/api/order/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          userId: user?._id || "guest",
+          cartItems: itemsArray,
+          totalAmount: total,
+          address: selectedAddress._id,
+        }),
       });
 
-      toast.success("Order placed successfully!");
-      router.push("/orders");
-    } catch (err) {
-      console.error("❌ Order creation failed:", err);
-      toast.error("Order creation failed!");
+      const data = await res.json();
+
+      if (data.success) {
+        toast.success("Order placed successfully!");
+        setCartItems({});
+        router.push("/order-placed");
+      } else {
+        toast.error(data.message || "Failed to place order");
+      }
+    } catch (error) {
+      console.error("❌ Order creation failed:", error);
+      toast.error("Something went wrong while placing order");
+    } finally {
+      setPlacingOrder(false);
     }
   };
-
-  // price calc
-  const subtotal = getCartAmount();
-  const tax = Math.floor(subtotal * 0.02);
-  const discountAmount = Math.floor(subtotal * discount);
-  const total = subtotal + tax - discountAmount;
 
   return (
     <div className="w-full md:w-96 bg-white p-6 rounded-2xl shadow-lg">
@@ -127,6 +141,7 @@ const OrderSummary = () => {
       </h2>
       <hr className="border-gray-300 mb-5" />
 
+      {/* Address Dropdown */}
       <div className="mb-6 relative">
         <label className="text-sm font-semibold text-gray-600 block mb-2">
           Select Address
@@ -146,23 +161,23 @@ const OrderSummary = () => {
         {isDropdownOpen && (
           <ul className="absolute bg-white w-full border shadow-md rounded-md mt-1 z-10 max-h-60 overflow-y-auto">
             {userAddresses.length > 0 ? (
-              userAddresses.map((address, index) => (
+              userAddresses.map((address, i) => (
                 <li
-                  key={index}
-                  onClick={() => handleAddressSelect(address)}
+                  key={i}
+                  onClick={() => {
+                    setSelectedAddress(address);
+                    setIsDropdownOpen(false);
+                  }}
                   className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-700"
                 >
-                  {address.fullName}, {address.area || address.city}, {address.state}
+                  {address.fullName}, {address.city}, {address.state}
                 </li>
               ))
             ) : (
               <li className="px-4 py-2 text-gray-500">No addresses found</li>
             )}
             <li
-              onClick={() => {
-                setIsDropdownOpen(false);
-                router.push("/add-address");
-              }}
+              onClick={() => router.push("/add-address")}
               className="px-4 py-2 text-center text-orange-600 font-medium hover:bg-gray-100 cursor-pointer"
             >
               + Add New Address
@@ -171,7 +186,7 @@ const OrderSummary = () => {
         )}
       </div>
 
-      {/* Promo */}
+      {/* Promo Code */}
       <div className="mb-6">
         <label className="text-sm font-semibold text-gray-600 block mb-2">
           Promo Code
@@ -195,6 +210,7 @@ const OrderSummary = () => {
 
       <hr className="border-gray-300 mb-5" />
 
+      {/* Summary */}
       <div className="space-y-3 text-gray-700 text-sm">
         <div className="flex justify-between">
           <p>Items ({getCartCount()})</p>
@@ -234,9 +250,14 @@ const OrderSummary = () => {
 
       <button
         onClick={createOrder}
-        className="w-full bg-orange-600 text-white py-3 mt-6 rounded-md hover:bg-orange-700 transition font-medium"
+        disabled={placingOrder}
+        className={`w-full text-white py-3 mt-6 rounded-md transition font-medium ${
+          placingOrder
+            ? "bg-gray-400 cursor-not-allowed"
+            : "bg-orange-600 hover:bg-orange-700"
+        }`}
       >
-        Place Order
+        {placingOrder ? "Placing Order..." : "Place Order"}
       </button>
     </div>
   );

@@ -21,67 +21,68 @@ export const AppContextProvider = ({ children }) => {
   const [isSeller, setIsSeller] = useState(false);
   const [cartItems, setCartItems] = useState({});
 
+  // ✅ Load cart safely
   useEffect(() => {
-    const saved = localStorage.getItem("cartItems");
-    if (saved) setCartItems(JSON.parse(saved));
+    try {
+      const saved = JSON.parse(localStorage.getItem("cartItems")) || {};
+      if (typeof saved === "object") setCartItems(saved);
+    } catch {
+      localStorage.removeItem("cartItems");
+    }
   }, []);
 
+  // ✅ Save cart
   useEffect(() => {
     localStorage.setItem("cartItems", JSON.stringify(cartItems));
   }, [cartItems]);
 
+  // ✅ Fetch products
   const fetchProductData = async () => {
     try {
       const { data } = await axios.get("/api/product/list");
       if (data?.success && Array.isArray(data.products)) {
         setProducts(data.products);
       } else {
-        throw new Error("Invalid API response");
+        setProducts(productsDummyData);
       }
-    } catch (error) {
-      console.warn("Product fetch failed:", error.message);
+    } catch {
       setProducts(productsDummyData);
-      toast.error("Using dummy products (API error)");
     }
   };
 
+  // ✅ Fetch user
   const fetchUserData = async () => {
     try {
       if (user?.publicMetadata?.role === "seller") setIsSeller(true);
       const token = await getToken();
-      if (!token) {
-        setUserData(userDummyData);
-        return;
-      }
+      if (!token) return setUserData(userDummyData);
 
       const { data } = await axios.get("/api/user/data", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (data?.success && data?.user) {
-        setUserData(data.user);
-      } else {
-        setUserData(userDummyData);
-      }
-    } catch (error) {
-      console.warn("User fetch failed:", error.message);
+      if (data?.success && data.user) setUserData(data.user);
+      else setUserData(userDummyData);
+    } catch {
       setUserData(userDummyData);
     }
   };
 
+  // ✅ Sync cart
   const syncCartToServer = async (newCart) => {
     if (!user) return;
-
     try {
       const token = await getToken();
-      const formattedCart = Object.values(newCart).map((item) => ({
-        productId: item._id,
-        name: item.name,
-        price: item.offerPrice || item.price,
-        imageUrl: item.imageUrl || "",
-        quantity: item.quantity,
-      }));
+      const formattedCart = Object.values(newCart)
+        .filter((i) => i && i._id)
+        .map((i) => ({
+          productId: i._id,
+          name: i.name,
+          price: i.offerPrice ?? i.price ?? 0,
+          imageUrl: i.imageUrl || "",
+          quantity: i.quantity || 1,
+        }));
 
-      const res = await fetch("/api/cart/update", {
+      await fetch("/api/cart/update", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -92,53 +93,42 @@ export const AppContextProvider = ({ children }) => {
           cartItems: formattedCart,
         }),
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to sync cart");
-
-      console.log("✅ Cart synced to server:", data);
     } catch (err) {
-      console.error("❌ syncCartToServer failed:", err.message);
+      console.warn("Cart sync failed:", err.message);
     }
   };
 
+  // ✅ Add to Cart (safe)
   const addToCart = (product, qty = 1) => {
-    if (!product?._id) return toast.error("Invalid product");
-
+    if (!product || !product._id) return toast.error("Invalid product");
     setCartItems((prev) => {
       const next = { ...prev };
-      const productId = product._id;
-
-      if (next[productId]) {
-        next[productId].quantity += qty;
-      } else {
-        next[productId] = { ...product, quantity: qty };
-      }
-
+      const existing = next[product._id] || {};
+      next[product._id] = {
+        ...existing,
+        ...product,
+        offerPrice: product.offerPrice ?? product.price ?? 0,
+        quantity: (existing.quantity || 0) + qty,
+      };
       syncCartToServer(next);
       return next;
     });
-
-    toast.success(`${product.name || "Item"} added to cart`);
+    toast.success(`${product.name} added`);
   };
 
+  // ✅ Update Quantity
   const updateCartQuantity = (productId, quantity) => {
-    const q = Number(quantity);
     setCartItems((prev) => {
       const next = { ...prev };
       if (!next[productId]) return prev;
-
-      if (q <= 0) {
-        delete next[productId];
-      } else {
-        next[productId].quantity = q;
-      }
-
+      if (quantity <= 0) delete next[productId];
+      else next[productId].quantity = quantity;
       syncCartToServer(next);
       return next;
     });
   };
 
+  // ✅ Remove from Cart
   const removeFromCart = (productId) => {
     setCartItems((prev) => {
       const next = { ...prev };
@@ -149,19 +139,29 @@ export const AppContextProvider = ({ children }) => {
     toast.success("Item removed");
   };
 
-  const getCartAmount = () =>
+  // ✅ Safe total
+  const getCartAmount = () => {
+    let total = 0;
+    for (const id in cartItems) {
+      const i = cartItems[id];
+      if (!i) continue;
+      const price = Number(i.offerPrice ?? i.price ?? 0);
+      const qty = Number(i.quantity ?? 1);
+      total += price * qty;
+    }
+    return total;
+  };
+
+  // ✅ Count
+  const getCartCount = () =>
     Object.values(cartItems).reduce(
-      (sum, item) => sum + (item.offerPrice || item.price || 0) * (item.quantity || 0),
+      (sum, i) => sum + (i?.quantity ?? 0),
       0
     );
-
-  const getCartCount = () =>
-    Object.values(cartItems).reduce((sum, item) => sum + (item.quantity || 0), 0);
 
   useEffect(() => {
     fetchProductData();
   }, []);
-
   useEffect(() => {
     if (user) fetchUserData();
   }, [user]);
