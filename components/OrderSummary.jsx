@@ -88,43 +88,49 @@ const OrderSummary = () => {
   // ✅ Place Order Function
   const createOrder = async () => {
     try {
-      if (!selectedAddress?._id) return toast.error("Please select an address");
+      if (!selectedAddress) return toast.error("Please select an address");
 
       const token = await getToken();
       if (!token) return toast.error("Please login first");
 
-      // 🧩 Convert cartItems to array for API
+      // 🧩 Convert cartItems to array for API (with product details)
       const itemsArray = Object.values(cartItems || {}).map((item) => ({
-        product: item._id, // ✅ FIXED: Correct key expected by backend
-        quantity: item.quantity || 1,
+        productId: item._id, // ✅ Correct key for backend
+        name: item.name, // ✅ Product name
+        price: item.price, // ✅ Product price
+        quantity: item.quantity || 1, // ✅ Quantity
       }));
 
       if (itemsArray.length === 0) return toast.error("Your cart is empty");
 
       setPlacingOrder(true);
 
-      const res = await fetch("/api/order/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          userId: user?._id || "guest",
+      // ✅ Send proper structure to backend
+      const res = await axios.post(
+        "/api/order/create",
+        {
           cartItems: itemsArray,
           totalAmount: total,
-          address: selectedAddress._id,
-        }),
-      });
+          address: {
+            fullName: selectedAddress.fullName,
+            area: selectedAddress.area,
+            city: selectedAddress.city,
+            state: selectedAddress.state,
+            postalCode: selectedAddress.postalCode,
+            phoneNumber: selectedAddress.phoneNumber,
+          },
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-      const data = await res.json();
-
-      if (data.success) {
-        toast.success("Order placed successfully!");
+      if (res.data.success) {
+        toast.success("🎉 Order placed successfully!");
         setCartItems({});
-        router.push("/order-placed");
+        router.push("/my-orders");
       } else {
-        toast.error(data.message || "Failed to place order");
+        toast.error(res.data.message || "Failed to place order");
       }
     } catch (error) {
       console.error("❌ Order creation failed:", error);

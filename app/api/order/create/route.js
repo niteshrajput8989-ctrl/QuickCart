@@ -1,88 +1,99 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/config/db";
 import Order from "@/models/Order";
-import User from "@/models/User";
 import Product from "@/models/Product";
+import { getAuth } from "@clerk/nextjs/server";
 
 export async function POST(req) {
   try {
-    const body = await req.json();
-    const { userId, cartItems, totalAmount, address } = body;
+    await connectDB();
 
-    // 🧠 Safety check
-    if (!cartItems || !Array.isArray(cartItems)) {
-      console.error("❌ cartItems missing or invalid:", cartItems);
+    const { userId } = getAuth(req);
+    const body = await req.json();
+    const { cartItems, totalAmount, address } = body;
+
+    // 🧠 Authentication check
+    if (!userId) {
       return NextResponse.json(
-        { success: false, message: "Invalid cart data" },
+        { success: false, message: "User not authenticated" },
+        { status: 401 }
+      );
+    }
+
+    // 🛒 Cart validation
+    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
+      return NextResponse.json(
+        { success: false, message: "Cart is empty or invalid" },
         { status: 400 }
       );
     }
 
-    await connectDB();
-    console.log("📦 Creating order for user:", userId);
-
-    // ✅ Agar product DB me nahi milta, dummy data use karo
-    const itemsWithDetails = await Promise.all(
+    // 🧾 Build items array with product info from DB
+    const items = await Promise.all(
       cartItems.map(async (item) => {
         try {
           const product = await Product.findById(item.productId);
 
           if (!product) {
-            console.log(
-              "⚠️ Product not found in DB:",
-              item.productId,
-              "— using dummy data"
-            );
-            return {
-              product: {
-                _id: item.productId || "dummy-id",
-                name: item.name || "Dummy Product",
-                price: item.price || 999,
-              },
-              quantity: item.quantity || 1,
-            };
+            console.warn(`⚠️ Product not found: ${item.productId}`);
           }
 
           return {
-            product: {
-              _id: product._id,
-              name: product.name,
-              price: product.price,
-            },
-            quantity: item.quantity,
+            productId: product ? product._id : item.productId,
+            name: product ? product.name : item.name || "Unknown Product",
+            price: product ? product.price : item.price || 0,
+            qty: item.quantity || 1,
+            total:
+              (product ? product.price : item.price || 0) *
+              (item.quantity || 1),
           };
         } catch (err) {
-          console.log("⚠️ Error loading product, using dummy:", err.message);
+          console.error("⚠️ Product fetch error:", err.message);
           return {
-            product: {
-              _id: item.productId || "dummy-id",
-              name: item.name || "Dummy Product",
-              price: item.price || 999,
-            },
-            quantity: item.quantity || 1,
+            productId: item.productId,
+            name: item.name || "Unknown Product",
+            price: item.price || 0,
+            qty: item.quantity || 1,
+            total: (item.price || 0) * (item.quantity || 1),
           };
         }
       })
     );
 
-    // ✅ Order create karna
-    const newOrder = new Order({
-      user: userId,
-      items: itemsWithDetails,
-      total: totalAmount || 0,
-      address: address || "No address provided",
+    // ✅ Clean address data
+    const cleanAddress = {
+      fullName: address?.fullName || "Unknown",
+      area: address?.area || "—",
+      city: address?.city || "—",
+      state: address?.state || "—",
+      phoneNumber: address?.phoneNumber || "—",
+      postalCode: address?.postalCode || "—",
+    };
+
+    // 🛍️ Create new order
+    const order = new Order({
+      userId,
+      items,
+      totalAmount: totalAmount || 0,
+      address: cleanAddress,
       status: "pending",
+      paymentMethod: "COD",
     });
 
-    await newOrder.save();
+    await order.save();
 
-    console.log("✅ Order saved successfully!");
-    return NextResponse.json({ success: true, order: newOrder });
+    console.log("✅ Order saved successfully:", order._id);
+
+    return NextResponse.json({
+      success: true,
+      message: "Order placed successfully",
+      order,
+    });
   } catch (error) {
     console.error("❌ Error creating order:", error);
-    return NextResponse.json({
-      success: false,
-      message: error.message,
-    });
+    return NextResponse.json(
+      { success: false, message: error.message },
+      { status: 500 }
+    );
   }
 }
